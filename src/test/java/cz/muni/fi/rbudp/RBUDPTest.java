@@ -11,9 +11,9 @@ public class RBUDPTest {
 		RBUDPReceiver receiver = new RBUDPReceiver();
 		RBUDPSender sender = new RBUDPSender();
 
-		receiver.init();
+		receiver.init(9250);
 		Thread.sleep(500);
-		sender.init("localhost", 9250);
+		sender.init("localhost", 9250, "C:\\Java\\reliable-blast-udp4j\\src\\test\\resources\\ideaIU-2016.2.exe");
 		/*Thread.sleep(500);
 		sender.init(9250);*/
 	}
