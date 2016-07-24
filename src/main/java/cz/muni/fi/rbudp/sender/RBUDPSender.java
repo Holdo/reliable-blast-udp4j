@@ -7,15 +7,14 @@ import java.io.IOException;
 import java.net.Socket;
 import java.util.zip.GZIPOutputStream;
 
-public class Sender {
+public class RBUDPSender {
 
-	final static Logger log = LoggerFactory.getLogger(Sender.class);
+	private final static Logger log = LoggerFactory.getLogger(RBUDPSender.class);
 	private int bufferSize = 65536;
 
-	public void init() {
-		String host = "localhost";
+	public void init(String host, int port) {
 		log.debug("Initializing RBUDP sender on " + host);
-		try (Socket tcpSocket = new Socket(host, 9250);
+		try (Socket tcpSocket = new Socket(host, port);
 			 GZIPOutputStream zipOut = new GZIPOutputStream(tcpSocket.getOutputStream(), bufferSize)) {
 			String testString = "LELLOOO";
 			log.info("Sending via TCP: " + testString);

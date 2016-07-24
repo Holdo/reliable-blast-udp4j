@@ -13,9 +13,9 @@ import java.util.Iterator;
 import java.util.concurrent.Executors;
 import java.util.zip.GZIPInputStream;
 
-public class Receiver implements Runnable {
+public class RBUDPReceiver implements Runnable {
 
-	final static Logger log = LoggerFactory.getLogger(Receiver.class);
+	private final static Logger log = LoggerFactory.getLogger(RBUDPReceiver.class);
 	private ServerSocketChannel tcpServer;
 	private Selector selector;
 	private int bufferSize = 65536;
@@ -27,7 +27,6 @@ public class Receiver implements Runnable {
 		selector = Selector.open();
 		tcpServer.register(selector, SelectionKey.OP_ACCEPT);
 		Thread thread = Executors.defaultThreadFactory().newThread(this);
-		log.debug("Running RBUDP receiver in a new thread");
 		thread.start();
 	}
 
