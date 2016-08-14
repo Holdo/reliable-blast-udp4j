@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
@@ -19,10 +20,10 @@ class RBUDPReceiverThread implements Runnable {
 
 	private final static Logger log = LoggerFactory.getLogger(RBUDPReceiver.class);
 
-	private SelectionKey tcpServerKey;
-	private Selector selector;
-	private int bufferSize;
-	private ByteBuffer intBB = ByteBuffer.allocateDirect(Integer.BYTES); //TODO new thread class this cannot be shared
+	SelectionKey tcpServerKey;
+	Selector selector;
+	int bufferSize;
+	ByteBuffer mtuBB = ByteBuffer.allocate(Integer.BYTES * 2);  //TODO new thread class this cannot be shared
 
 	RBUDPReceiverThread(int port) throws IOException {
 		log.info("Initializing RBUDP receiver on {}:{}", InetAddress.getLocalHost(), port);
@@ -56,27 +57,27 @@ class RBUDPReceiverThread implements Runnable {
 					} else {
 						SocketChannel client = (SocketChannel) key.channel();
 						if (!key.isReadable()) continue;
-						intBB.clear();
-						int bytesRead = client.read(intBB);
+						mtuBB.clear();
+						int bytesRead = client.read(mtuBB);
 						if (bytesRead == -1) {
 							log.warn("Received EOF signal via TCP, closing local socket {}", client.getLocalAddress());
 							key.cancel();
 							client.close();
 							continue;
 						}
-						int message = intBB.getInt(0);
-						log.debug("Received {} sync message via TCP", RBUDPProtocol.getValues()[message].name());
-						//TODO message logic
-						//MessageHandler.class.getMethod(RBUDPProtocol.getValues()[message].name(), )
-						intBB.clear();
-						intBB.putInt(bufferSize);
-						intBB.flip();
-						client.write(intBB);
-						log.debug("Sent back buffer size {} (MTU is + 64)", bufferSize);
+						mtuBB.flip();
+						int message = mtuBB.getInt();
+						log.debug("Received {} sync message via TCP ({} bytes)", RBUDPProtocol.getValues()[message].name(), bytesRead);
+						try {
+							MessageHandler.class.getMethod(RBUDPProtocol.getValues()[message].name(), RBUDPReceiverThread.class).invoke(null, this);
+							client.write(mtuBB);
+						} catch (InvocationTargetException | IllegalAccessException | NoSuchMethodException e) {
+							log.error("Error trying to handle received TCP message", e);
+						}
 					}
 				}
 			} catch (IOException e) {
-				log.error("Error during receiver TCP init phase");
+				log.error("Error during handling TCP connection");
 			}
 		}
 	}
