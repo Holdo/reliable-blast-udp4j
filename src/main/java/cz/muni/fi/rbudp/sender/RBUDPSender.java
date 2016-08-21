@@ -26,8 +26,9 @@ public class RBUDPSender {
 	private RandomAccessFile file = null;
 
 	private int bufferSize;
+	private long sessionID;
 	private AsynchronousSocketChannel tcpSocketChannel = null;
-	private ByteBuffer mtuBB = ByteBuffer.allocate(Integer.BYTES * 2);
+	private ByteBuffer mtuBB = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
 
 	public void send(String host, int port, String absoluteFilePath) throws IOException {
 		this.absoluteFilePath = absoluteFilePath;
@@ -54,37 +55,43 @@ public class RBUDPSender {
 
 	private void sendSingleSyncMessage(RBUDPProtocol message) {
 		Executors.defaultThreadFactory().newThread(() -> {
-			ByteBuffer threadIntBB = ByteBuffer.allocateDirect(Integer.BYTES);
-			int response = 0;
+			ByteBuffer threadBB = ByteBuffer.allocateDirect(Integer.BYTES + Long.BYTES);
+			int serverBB = 0;
 			log.debug("New thread waiting for response from TCP sync message " + message.name());
 			try {
-				threadIntBB.clear();
-				tcpSocketChannel.read(threadIntBB).get();
-				response = threadIntBB.getInt(0);
-				log.debug("TCP response from receiver: {}", response);
+				threadBB.clear();
+				tcpSocketChannel.read(threadBB).get();
+				threadBB.flip();
+				serverBB = threadBB.getInt();
+				sessionID = threadBB.getLong();
+				log.debug("TCP response from receiver: {}", serverBB);
 			} catch (InterruptedException | ExecutionException e) {
 				log.error("Exception during receiving response of TCP sync message " + message.name());
 			}
 			switch (message) {
 				case getMTU:
-					if (response < bufferSize) bufferSize = response;
+					if (serverBB < bufferSize) bufferSize = serverBB;
 					mtuBB = ByteBuffer.allocateDirect(bufferSize);
 					log.info("MTU agreed on {}", bufferSize + 64);
 					sendFileInfo();
 					break;
-				default: break;
+				default:
+					break; //TODO exception
 			}
 		}).start();
 
-
-		ByteBuffer twoIntBB = ByteBuffer.allocateDirect(Integer.BYTES * 2);
 		try {
-			twoIntBB.clear();
-			twoIntBB.putInt(message.ordinal());
-			twoIntBB.putInt(bufferSize);
-			twoIntBB.flip();
+			mtuBB.clear();
+			mtuBB.putInt(message.ordinal());
+			switch (message) {
+				case getMTU:
+					mtuBB.putLong(bufferSize); //long!!!
+					break;
+				default: break; //TODO exception
+			}
+			mtuBB.flip();
 			log.debug("Sending {} sync message via TCP", message.name());
-			this.tcpSocketChannel.write(twoIntBB).get();
+			this.tcpSocketChannel.write(mtuBB).get();
 		} catch (InterruptedException | ExecutionException e) {
 			log.error("Exception during sending TCP sync message " + message.name());
 		}
@@ -98,7 +105,8 @@ public class RBUDPSender {
 			try {
 				threadIntBB.clear();
 				tcpSocketChannel.read(threadIntBB).get();
-				response = threadIntBB.getInt(0);
+				threadIntBB.flip();
+				response = threadIntBB.getInt();
 				log.debug("TCP response from receiver: {}", response);
 				synchronized (closeEverythingObjectMonitor) {
 					closeEverythingObjectMonitor.notify();
@@ -110,16 +118,17 @@ public class RBUDPSender {
 
 		try {
 			mtuBB.clear();
-			mtuBB.putInt(RBUDPProtocol.fileInfo.ordinal());
+			mtuBB.putInt(RBUDPProtocol.fileInfoInit.ordinal());
+			mtuBB.putLong(sessionID);
 			byte[] fileLengthBuffer = Paths.get(absoluteFilePath).getFileName().toString().getBytes(StandardCharsets.UTF_8);
 			mtuBB.putInt(fileLengthBuffer.length);
 			mtuBB.put(fileLengthBuffer);
 			mtuBB.putLong(file.getChannel().size());
 			mtuBB.flip();
-			log.debug("Sending {} sync message via TCP", RBUDPProtocol.fileInfo.name());
+			log.debug("Sending {} sync message via TCP", RBUDPProtocol.fileInfoInit.name());
 			this.tcpSocketChannel.write(mtuBB).get();
 		} catch (InterruptedException | IOException | ExecutionException e) {
-			log.error("Exception during sending TCP sync message " + RBUDPProtocol.fileInfo.name());
+			log.error("Exception during sending TCP sync message " + RBUDPProtocol.fileInfoInit.name());
 		}
 	}
 }

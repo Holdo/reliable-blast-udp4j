@@ -1,8 +1,9 @@
 package cz.muni.fi.rbudp.enums;
 
 public enum RBUDPProtocol {
-	getMTU, //4 bytes as integer
-	fileInfo;
+	getMTU,
+	fileInfoInit,
+	nextState;
 
 	private static final RBUDPProtocol[] values;
 
