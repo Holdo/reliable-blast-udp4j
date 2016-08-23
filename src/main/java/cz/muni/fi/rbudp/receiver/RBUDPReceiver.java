@@ -10,6 +10,9 @@ import java.net.NetworkInterface;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -19,6 +22,8 @@ public class RBUDPReceiver {
 	private final static Logger log = LoggerFactory.getLogger(RBUDPReceiver.class);
 
 	private static RBUDPReceiver instance = null;
+
+	private Path receiveFolder = null;
 
 	private SelectionKey tcpServerKey;
 	private Selector selector;
@@ -33,7 +38,8 @@ public class RBUDPReceiver {
 		return instance;
 	}
 
-	public void start(int port) throws IOException {
+	public void start(int port, String receiveFolder) throws IOException {
+		this.receiveFolder = Paths.get(receiveFolder);
 		log.info("Initializing RBUDP receiver on {}:{}", InetAddress.getLocalHost(), port);
 		serverBufferSize = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getMTU() - 64;
 		log.debug("MTU of receiver ethernet is {}, buffer set to {} bytes", serverBufferSize + 64, serverBufferSize);
@@ -45,6 +51,14 @@ public class RBUDPReceiver {
 		tcpServerKey = tcpServer.register(selector, SelectionKey.OP_ACCEPT);
 
 		Executors.defaultThreadFactory().newThread(new RBUDPReceiverThread()).start();
+	}
+
+	public String getReceiveFolder() {
+		return receiveFolder.toString();
+	}
+
+	public void setReceiveFolder(String receiveFolder) {
+		this.receiveFolder = Paths.get(receiveFolder);
 	}
 
 	SelectionKey getTcpServerKey() {
@@ -59,11 +73,22 @@ public class RBUDPReceiver {
 		return serverBufferSize;
 	}
 
-	Map<Long, RBUDPSession> getSessions() {
-		return sessions;
+	Long getSessionID(SocketChannel client) throws IOException {
+		return sessionsPointerMap.get(client.getRemoteAddress().toString());
 	}
 
-	Map<String, Long> getSessionsPointerMap() {
-		return sessionsPointerMap;
+	RBUDPSession getSession(long sessionID) {
+		return sessions.get(sessionID);
 	}
+
+	void addSession(SocketChannel client, RBUDPSession session) throws IOException {
+		sessionsPointerMap.put(client.getRemoteAddress().toString(), session.getSessionID());
+		sessions.put(session.getSessionID(), session);
+	}
+
+	void removeSession(RBUDPSession session) {
+		sessions.remove(session.getSessionID());
+		sessionsPointerMap.remove(session.getRemoteAddress());
+	}
+
 }

@@ -4,6 +4,7 @@ import cz.muni.fi.rbudp.enums.RBUDPProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -42,7 +43,7 @@ class RBUDPReceiverThread implements Runnable {
 						client = (SocketChannel) key.channel();
 						if (!key.isReadable()) continue;
 
-						Long sessionID = tcpServer.getSessionsPointerMap().get(client.getRemoteAddress().toString());
+						Long sessionID = tcpServer.getSessionID(client);
 						if (sessionID == null) {
 							//Init session and return smaller BB size
 							threadMiniBB.clear();
@@ -59,10 +60,9 @@ class RBUDPReceiverThread implements Runnable {
 
 							final int senderBBSize = Math.toIntExact(threadMiniBB.getLong());
 							sessionID = UUID.randomUUID().getLeastSignificantBits();
-							RBUDPSession session = new RBUDPSession(sessionID, ByteBuffer.allocateDirect(
-									(tcpServer.getServerBufferSize() < senderBBSize)? tcpServer.getServerBufferSize() : senderBBSize));
-							tcpServer.getSessionsPointerMap().put(client.getRemoteAddress().toString(), sessionID);
-							tcpServer.getSessions().put(sessionID, session);
+							RBUDPSession session = new RBUDPSession(client, sessionID,
+									ByteBuffer.allocateDirect((tcpServer.getServerBufferSize() < senderBBSize)? tcpServer.getServerBufferSize() : senderBBSize));
+							tcpServer.addSession(client, session);
 							ByteBuffer bb = session.getBB();
 							log.debug("Created new session with buffer size {} and ID {}", bb.capacity(), sessionID);
 							bb.clear();
@@ -72,12 +72,24 @@ class RBUDPReceiverThread implements Runnable {
 							log.debug("Sending back smaller buffer size {} with secret session ID", bb.capacity());
 							client.write(bb);
 						} else {
-							MessageHandler.handleTcpMessage(client, tcpServer.getSessions().get(sessionID));
+							MessageHandler.handleTcpMessage(client, tcpServer.getSession(sessionID));
 						}
 					}
 				}
-			} catch (IOException e) {
-				log.warn("Exception during handling TCP connection", e);
+			} catch (EOFException eofE) {
+				log.info(eofE.getMessage());
+				if (key != null) {
+					key.cancel();
+				}
+				if (client != null) {
+					try {
+						client.close();
+					} catch (IOException e1) {
+						log.warn("Error during closing TCP connection", e1);
+					}
+				}
+			} catch (IOException ioE) {
+				log.warn("Exception during handling TCP connection, closing {} TCP connection", ioE);
 				if (key != null) {
 					key.cancel();
 				}
