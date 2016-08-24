@@ -41,8 +41,8 @@ public class RBUDPReceiver {
 	public void start(int port, String receiveFolder) throws IOException {
 		this.receiveFolder = Paths.get(receiveFolder);
 		log.info("Initializing RBUDP receiver on {}:{}", InetAddress.getLocalHost(), port);
-		serverBufferSize = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getMTU() - 64;
-		log.debug("MTU of receiver ethernet is {}, buffer set to {} bytes", serverBufferSize + 64, serverBufferSize);
+		serverBufferSize = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getMTU() - 68;
+		log.debug("MTU of receiver ethernet is {}, buffer set to {} bytes", serverBufferSize + 68, serverBufferSize);
 
 		ServerSocketChannel tcpServer = ServerSocketChannel.open();
 		tcpServer.configureBlocking(false);

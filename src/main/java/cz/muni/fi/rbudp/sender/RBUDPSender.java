@@ -34,8 +34,8 @@ public class RBUDPSender {
 		this.absoluteFilePath = absoluteFilePath;
 
 		log.info("Initializing RBUDP sender to {}:{}", host, port);
-		bufferSize = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getMTU() - 64;
-		log.debug("MTU of sender ethernet is {}, buffer set to {} bytes", bufferSize + 64, bufferSize);
+		bufferSize = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getMTU() - 68;
+		log.debug("MTU of sender ethernet is {}, buffer set to {} bytes", bufferSize + 68, bufferSize);
 
 		try {
 			file = new RandomAccessFile(absoluteFilePath, "r");
@@ -72,7 +72,7 @@ public class RBUDPSender {
 				case getMTU:
 					if (serverBB < bufferSize) bufferSize = serverBB;
 					mtuBB = ByteBuffer.allocateDirect(bufferSize);
-					log.info("MTU agreed on {}", bufferSize + 64);
+					log.info("MTU agreed on {}", bufferSize + 68);
 					sendFileInfo();
 					break;
 				default:
