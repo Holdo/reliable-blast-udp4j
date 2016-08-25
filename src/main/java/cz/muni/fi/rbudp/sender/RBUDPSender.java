@@ -23,7 +23,8 @@ public class RBUDPSender {
 	private static final Object closeEverythingObjectMonitor = new Object();
 
 	private String absoluteFilePath = null;
-	private RandomAccessFile file = null;
+	private RandomAccessFile raf = null;
+	private int numberOfBlocks;
 
 	private int bufferSize;
 	private long sessionID;
@@ -38,7 +39,7 @@ public class RBUDPSender {
 		log.debug("MTU of sender ethernet is {}, buffer set to {} bytes", bufferSize + 68, bufferSize);
 
 		try {
-			file = new RandomAccessFile(absoluteFilePath, "r");
+			raf = new RandomAccessFile(absoluteFilePath, "r");
 			this.tcpSocketChannel = AsynchronousSocketChannel.open();
 			this.tcpSocketChannel.connect(new InetSocketAddress(host, port)).get();
 			sendSingleSyncMessage(RBUDPProtocol.getMTU);
@@ -49,7 +50,7 @@ public class RBUDPSender {
 			log.error("Error occured during RBUDP TCP init", e);
 		} finally {
 			this.tcpSocketChannel.close();
-			file.close();
+			raf.close();
 		}
 	}
 
@@ -112,18 +113,22 @@ public class RBUDPSender {
 					closeEverythingObjectMonitor.notify();
 				}
 			} catch (InterruptedException | ExecutionException e) {
-				log.error("Exception during receiving response from TCP sync message sendFileInfo");
+				log.error("Exception during receiving response from TCP sync message sendFileInfo", e);
 			}
 		}).start();
 
 		try {
+			numberOfBlocks = (raf.length() % mtuBB.capacity() == 0L)?
+					Math.toIntExact(raf.length() / mtuBB.capacity()) :
+					Math.toIntExact((raf.length() / mtuBB.capacity()) + 1);
 			mtuBB.clear();
 			mtuBB.putInt(RBUDPProtocol.fileInfoInit.ordinal());
 			mtuBB.putLong(sessionID);
 			byte[] fileLengthBuffer = Paths.get(absoluteFilePath).getFileName().toString().getBytes(StandardCharsets.UTF_8);
 			mtuBB.putInt(fileLengthBuffer.length);
 			mtuBB.put(fileLengthBuffer);
-			mtuBB.putLong(file.getChannel().size());
+			mtuBB.putLong(raf.length());
+			mtuBB.putInt(numberOfBlocks);
 			mtuBB.flip();
 			log.debug("Sending {} sync message via TCP", RBUDPProtocol.fileInfoInit.name());
 			this.tcpSocketChannel.write(mtuBB).get();

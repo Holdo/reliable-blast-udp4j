@@ -45,15 +45,16 @@ class MessageHandler {
 		ByteBuffer bb = session.getBB();
 		final byte[] fileNameBuffer = new byte[bb.getInt()];
 		bb.get(fileNameBuffer);
-		final long fileSize = bb.getLong();
 		final String filename = new String(fileNameBuffer, StandardCharsets.UTF_8);
-		log.debug("Received request for {} file with size {} bytes", filename, fileSize);
-		bb.clear();
+		final long fileSize = bb.getLong();
+		final int numberOfBlocks = bb.getInt();
+		log.debug("Received request for {} file with size {} bytes requiring {} UDP packets", filename, fileSize, numberOfBlocks);
 		String receiveFolder = tcpServer.getReceiveFolder();
 		if (!receiveFolder.endsWith(File.separator)) receiveFolder = receiveFolder + File.separator;
 		RandomAccessFile raf = new RandomAccessFile(receiveFolder + filename, "rw");
 		raf.setLength(fileSize);
-		session.setRandomAccessFile(raf);
+		session.setRandomAccessFile(raf, numberOfBlocks);
+		bb.clear();
 		bb.putInt(0); //TODO continue here
 		bb.flip();
 		client.write(bb);

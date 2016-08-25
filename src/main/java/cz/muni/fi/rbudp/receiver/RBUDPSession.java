@@ -10,18 +10,18 @@ class RBUDPSession {
 
 	private long sessionID;
 	private String remoteAddress;
-	private ByteBuffer byteBuffer;
-	private RandomAccessFile randomAccessFile = null;
+	private ByteBuffer bb;
+	private RandomAccessFile raf = null;
 	private BitSet receivedBlocksBitSet = null;
 
 	RBUDPSession(SocketChannel client, long sessionID, ByteBuffer byteBuffer) throws IOException {
 		this.remoteAddress = client.getRemoteAddress().toString();
 		this.sessionID = sessionID;
-		this.byteBuffer = byteBuffer;
+		this.bb = byteBuffer;
 	}
 
 	ByteBuffer getBB() {
-		return byteBuffer;
+		return bb;
 	}
 
 	long getSessionID() {
@@ -33,14 +33,12 @@ class RBUDPSession {
 	}
 
 	RandomAccessFile getRandomAccessFile() {
-		return randomAccessFile;
+		return raf;
 	}
 
-	void setRandomAccessFile(RandomAccessFile randomAccessFile) throws IOException {
-		this.receivedBlocksBitSet = (randomAccessFile.length() % this.byteBuffer.capacity() == 0L)?
-				new BitSet(Math.toIntExact(randomAccessFile.length() / this.byteBuffer.capacity())) :
-				new BitSet(Math.toIntExact((randomAccessFile.length() / this.byteBuffer.capacity()) + 1));
-		this.randomAccessFile = randomAccessFile;
+	void setRandomAccessFile(RandomAccessFile raf, int numberOfBlocks) throws IOException {
+		this.receivedBlocksBitSet = new BitSet(numberOfBlocks);
+		this.raf = raf;
 	}
 
 	void markBlockAsReceived(int blockNumberFromZero) {

@@ -56,7 +56,7 @@ class RBUDPReceiverThread implements Runnable {
 							}
 							threadMiniBB.flip();
 							final int message = threadMiniBB.getInt();
-							log.debug("Received {} sync message via TCP ({} bytes)", RBUDPProtocol.getValues()[message].name(), bytesRead);
+							log.debug("Received {} sync message via TCP", RBUDPProtocol.getValues()[message].name());
 
 							final int senderBBSize = Math.toIntExact(threadMiniBB.getLong());
 							sessionID = UUID.randomUUID().getLeastSignificantBits();
