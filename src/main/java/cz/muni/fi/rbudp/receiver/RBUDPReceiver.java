@@ -22,6 +22,7 @@ public class RBUDPReceiver {
 	private final static Logger log = LoggerFactory.getLogger(RBUDPReceiver.class);
 
 	private static RBUDPReceiver instance = null;
+	private static final Object instanceLock = new Object();
 
 	private Path receiveFolder = null;
 
@@ -34,7 +35,9 @@ public class RBUDPReceiver {
 	private RBUDPReceiver() {}
 
 	public static RBUDPReceiver getInstance() {
-		if (instance == null) instance = new RBUDPReceiver();
+		synchronized (instanceLock) {
+			if (instance == null) instance = new RBUDPReceiver();
+		}
 		return instance;
 	}
 

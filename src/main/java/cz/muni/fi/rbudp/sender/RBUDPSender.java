@@ -14,6 +14,7 @@ import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class RBUDPSender {
@@ -29,6 +30,7 @@ public class RBUDPSender {
 	private int bufferSize;
 	private long sessionID;
 	private AsynchronousSocketChannel tcpSocketChannel = null;
+	private ExecutorService responseThreadExecutor = Executors.newSingleThreadExecutor();
 	private ByteBuffer mtuBB = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
 
 	public void send(String host, int port, String absoluteFilePath) throws IOException {
@@ -47,7 +49,7 @@ public class RBUDPSender {
 				closeEverythingObjectMonitor.wait();
 			}
 		} catch (Exception e) {
-			log.error("Error occured during RBUDP TCP init", e);
+			log.error("Error occured in RBUDPSender", e);
 		} finally {
 			this.tcpSocketChannel.close();
 			raf.close();
@@ -55,7 +57,7 @@ public class RBUDPSender {
 	}
 
 	private void sendSingleSyncMessage(RBUDPProtocol message) {
-		Executors.defaultThreadFactory().newThread(() -> {
+		responseThreadExecutor.execute(() -> {
 			ByteBuffer threadBB = ByteBuffer.allocateDirect(Integer.BYTES + Long.BYTES);
 			int serverBB = 0;
 			log.debug("New thread waiting for response from TCP sync message " + message.name());
@@ -79,14 +81,14 @@ public class RBUDPSender {
 				default:
 					break; //TODO exception
 			}
-		}).start();
+		});
 
 		try {
 			mtuBB.clear();
 			mtuBB.putInt(message.ordinal());
 			switch (message) {
 				case getMTU:
-					mtuBB.putLong(bufferSize); //long!!!
+					mtuBB.putLong(bufferSize); //long because sessionID will be long!!!
 					break;
 				default: break; //TODO exception
 			}
@@ -99,23 +101,22 @@ public class RBUDPSender {
 	}
 
 	private void sendFileInfo() {
-		Executors.defaultThreadFactory().newThread(() -> {
+		responseThreadExecutor.execute(() -> {
 			ByteBuffer threadIntBB = ByteBuffer.allocateDirect(Integer.BYTES);
-			int response = 0;
 			log.debug("New thread waiting for response of TCP sync message sendFileInfo");
 			try {
 				threadIntBB.clear();
 				tcpSocketChannel.read(threadIntBB).get();
 				threadIntBB.flip();
-				response = threadIntBB.getInt();
-				log.debug("TCP response from receiver: {}", response);
-				synchronized (closeEverythingObjectMonitor) {
-					closeEverythingObjectMonitor.notify();
+				final int response = threadIntBB.getInt();
+				if (response == 0) {
+					log.debug("TCP response from receiver: 0 - READY");
+					sendFile();
 				}
 			} catch (InterruptedException | ExecutionException e) {
 				log.error("Exception during receiving response from TCP sync message sendFileInfo", e);
 			}
-		}).start();
+		});
 
 		try {
 			numberOfBlocks = (raf.length() % mtuBB.capacity() == 0L)?
@@ -124,7 +125,7 @@ public class RBUDPSender {
 			mtuBB.clear();
 			mtuBB.putInt(RBUDPProtocol.fileInfoInit.ordinal());
 			mtuBB.putLong(sessionID);
-			byte[] fileLengthBuffer = Paths.get(absoluteFilePath).getFileName().toString().getBytes(StandardCharsets.UTF_8);
+			final byte[] fileLengthBuffer = Paths.get(absoluteFilePath).getFileName().toString().getBytes(StandardCharsets.UTF_8);
 			mtuBB.putInt(fileLengthBuffer.length);
 			mtuBB.put(fileLengthBuffer);
 			mtuBB.putLong(raf.length());
@@ -134,6 +135,14 @@ public class RBUDPSender {
 			this.tcpSocketChannel.write(mtuBB).get();
 		} catch (InterruptedException | IOException | ExecutionException e) {
 			log.error("Exception during sending TCP sync message " + RBUDPProtocol.fileInfoInit.name());
+		}
+	}
+
+	private void sendFile() {
+		//TODO
+
+		synchronized (closeEverythingObjectMonitor) {
+			closeEverythingObjectMonitor.notify();
 		}
 	}
 }
