@@ -49,7 +49,7 @@ public class RBUDPReceiver {
 
 		ServerSocketChannel tcpServer = ServerSocketChannel.open();
 		tcpServer.configureBlocking(false);
-		tcpServer.socket().bind(new InetSocketAddress(port)); //local + port
+		tcpServer.bind(new InetSocketAddress(port)); //local + port
 		selector = Selector.open();
 		tcpServerKey = tcpServer.register(selector, SelectionKey.OP_ACCEPT);
 

@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
@@ -18,12 +19,11 @@ import java.nio.file.Paths;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class RBUDPSender {
 
 	private final static Logger log = LoggerFactory.getLogger(RBUDPSender.class);
-
-	private static final Object closeEverythingObjectMonitor = new Object();
 
 	private final InetSocketAddress address;
 	private final String absoluteFilePath;
@@ -51,10 +51,9 @@ public class RBUDPSender {
 			raf = new RandomAccessFile(absoluteFilePath, "r");
 			this.tcpSocketChannel = AsynchronousSocketChannel.open();
 			this.tcpSocketChannel.connect(address).get();
-			sendSingleSyncMessage(RBUDPProtocol.getMTU);
-			synchronized (closeEverythingObjectMonitor) {
-				closeEverythingObjectMonitor.wait();
-			}
+			sendSimpleSyncMessage(RBUDPProtocol.getMTU);
+			sendFileInfo();
+			sendFile();
 		} catch (Exception e) {
 			log.error("Error occured in RBUDPSender", e);
 		} finally {
@@ -63,86 +62,72 @@ public class RBUDPSender {
 		}
 	}
 
-	private void sendSingleSyncMessage(RBUDPProtocol message) {
-		responseThreadExecutor.execute(() -> {
+	private Method sendSimpleSyncMessage(RBUDPProtocol message) throws ExecutionException, InterruptedException, IOException {
+		Future<Method> response = responseThreadExecutor.submit(() -> {
 			ByteBuffer threadBB = ByteBuffer.allocateDirect(Integer.BYTES + Long.BYTES);
-			int serverBB = 0;
 			log.debug("New thread waiting for response from TCP sync message " + message.name());
-			try {
-				threadBB.clear();
-				tcpSocketChannel.read(threadBB).get();
-				threadBB.flip();
-				serverBB = threadBB.getInt();
-				sessionID = threadBB.getLong();
-				log.debug("TCP response from receiver: {}", serverBB);
-			} catch (InterruptedException | ExecutionException e) {
-				log.error("Exception during receiving response of TCP sync message " + message.name());
-			}
+			threadBB.clear();
+			tcpSocketChannel.read(threadBB).get();
+			threadBB.flip();
+			final int serverBB = threadBB.getInt();
+			sessionID = threadBB.getLong();
+			log.debug("TCP response from receiver: {}", serverBB);
 			switch (message) {
 				case getMTU:
 					if (serverBB < bufferSize) bufferSize = serverBB;
 					mtuBB = ByteBuffer.allocateDirect(bufferSize);
 					log.info("MTU agreed on {}", bufferSize + 68);
-					sendFileInfo();
-					break;
+					return RBUDPSender.class.getDeclaredMethod("sendFileInfo");
 				default:
-					break; //TODO exception
+					return RBUDPSender.class.getMethod("unknownMethod"); //should not happen
 			}
 		});
 
-		try {
-			mtuBB.clear();
-			mtuBB.putInt(message.ordinal());
-			switch (message) {
-				case getMTU:
-					mtuBB.putLong(bufferSize); //long because sessionID will be long!!!
-					break;
-				default: break; //TODO exception
-			}
-			mtuBB.flip();
-			log.debug("Sending {} sync message via TCP", message.name());
-			this.tcpSocketChannel.write(mtuBB).get();
-		} catch (InterruptedException | ExecutionException e) {
-			log.error("Exception during sending TCP sync message " + message.name());
+		mtuBB.clear();
+		mtuBB.putInt(message.ordinal());
+		switch (message) {
+			case getMTU:
+				mtuBB.putLong(bufferSize); //long because sessionID will be long!!!
+				break;
+			default:
+				throw new IOException("Cannot send unknown message: " + message.name());
 		}
+		mtuBB.flip();
+		log.debug("Sending {} sync message via TCP", message.name());
+		this.tcpSocketChannel.write(mtuBB).get();
+
+		return response.get();
 	}
 
-	private void sendFileInfo() {
-		responseThreadExecutor.execute(() -> {
+	private void sendFileInfo() throws ExecutionException, InterruptedException, IOException {
+		Future<Void> response = responseThreadExecutor.submit(() -> {
 			ByteBuffer threadIntBB = ByteBuffer.allocateDirect(Integer.BYTES);
 			log.debug("New thread waiting for response of TCP sync message sendFileInfo");
-			try {
-				threadIntBB.clear();
-				tcpSocketChannel.read(threadIntBB).get();
-				threadIntBB.flip();
-				final int response = threadIntBB.getInt();
-				if (response == 0) {
-					log.debug("TCP response from receiver: 0 - READY");
-					sendFile();
-				}
-			} catch (InterruptedException | ExecutionException e) {
-				log.error("Exception during receiving response from TCP sync message sendFileInfo", e);
-			}
+			threadIntBB.clear();
+			tcpSocketChannel.read(threadIntBB).get();
+			threadIntBB.flip();
+			final int responseCode = threadIntBB.getInt();
+			if (responseCode == 0) log.debug("TCP response from receiver: 0 - READY");
+			else throw new IOException("Unknown response received: " + responseCode);
+			return null;
 		});
 
-		try {
-			numberOfBlocks = (raf.length() % mtuBB.capacity() == 0L)?
-					Math.toIntExact(raf.length() / mtuBB.capacity()) :
-					Math.toIntExact((raf.length() / mtuBB.capacity()) + 1);
-			mtuBB.clear();
-			mtuBB.putInt(RBUDPProtocol.fileInfoInit.ordinal());
-			mtuBB.putLong(sessionID);
-			final byte[] fileLengthBuffer = Paths.get(absoluteFilePath).getFileName().toString().getBytes(StandardCharsets.UTF_8);
-			mtuBB.putInt(fileLengthBuffer.length);
-			mtuBB.put(fileLengthBuffer);
-			mtuBB.putLong(raf.length());
-			mtuBB.putInt(numberOfBlocks);
-			mtuBB.flip();
-			log.debug("Sending {} sync message via TCP", RBUDPProtocol.fileInfoInit.name());
-			this.tcpSocketChannel.write(mtuBB).get();
-		} catch (InterruptedException | IOException | ExecutionException e) {
-			log.error("Exception during sending TCP sync message " + RBUDPProtocol.fileInfoInit.name());
-		}
+		numberOfBlocks = (raf.length() % mtuBB.capacity() == 0L) ?
+				Math.toIntExact(raf.length() / mtuBB.capacity()) :
+				Math.toIntExact((raf.length() / mtuBB.capacity()) + 1);
+		mtuBB.clear();
+		mtuBB.putInt(RBUDPProtocol.fileInfoInit.ordinal());
+		mtuBB.putLong(sessionID);
+		final byte[] fileLengthBuffer = Paths.get(absoluteFilePath).getFileName().toString().getBytes(StandardCharsets.UTF_8);
+		mtuBB.putInt(fileLengthBuffer.length);
+		mtuBB.put(fileLengthBuffer);
+		mtuBB.putLong(raf.length());
+		mtuBB.putInt(numberOfBlocks);
+		mtuBB.flip();
+		log.debug("Sending {} sync message via TCP", RBUDPProtocol.fileInfoInit.name());
+		this.tcpSocketChannel.write(mtuBB).get();
+
+		response.get();
 	}
 
 	private void sendFile() {
@@ -161,8 +146,5 @@ public class RBUDPSender {
 			log.error("Error occured in UDP channel", e);
 		}
 		log.debug("Finished sending file via UDP");
-		synchronized (closeEverythingObjectMonitor) {
-			closeEverythingObjectMonitor.notify();
-		}
 	}
 }

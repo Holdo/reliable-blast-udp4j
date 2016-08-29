@@ -1,20 +1,27 @@
 package cz.muni.fi.rbudp.receiver;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
 import java.util.BitSet;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 class RBUDPSession {
+
+	private final static Logger log = LoggerFactory.getLogger(RBUDPSession.class);
 
 	private long sessionID;
 	private SocketAddress remoteAddress;
 	private ByteBuffer bb;
 	private RandomAccessFile raf = null;
 	private BitSet receivedBlocksBitSet = null;
-	private DatagramChannel udpChannel = null;
+	private ExecutorService udpServerExecutor = null;
 
 	RBUDPSession(SocketAddress remoteAddress, long sessionID, ByteBuffer byteBuffer) {
 		this.remoteAddress = remoteAddress;
@@ -23,7 +30,7 @@ class RBUDPSession {
 	}
 
 	void startUDPServer() throws IOException {
-		if (udpChannel != null) throw new IOException("UDP channel for session " + remoteAddress + " is already open");
+		if (udpServerExecutor != null) throw new IOException("UDP server for session " + remoteAddress + " was already started");
 	}
 
 	ByteBuffer getBB() {
