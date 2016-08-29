@@ -11,6 +11,8 @@ import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
+import java.nio.channels.DatagramChannel;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.concurrent.ExecutionException;
@@ -23,7 +25,9 @@ public class RBUDPSender {
 
 	private static final Object closeEverythingObjectMonitor = new Object();
 
-	private String absoluteFilePath = null;
+	private final InetSocketAddress address;
+	private final String absoluteFilePath;
+
 	private RandomAccessFile raf = null;
 	private int numberOfBlocks;
 
@@ -33,17 +37,20 @@ public class RBUDPSender {
 	private ExecutorService responseThreadExecutor = Executors.newSingleThreadExecutor();
 	private ByteBuffer mtuBB = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
 
-	public void send(String host, int port, String absoluteFilePath) throws IOException {
+	public RBUDPSender(String host, int port, String absoluteFilePath) {
+		this.address = new InetSocketAddress(host, port);
 		this.absoluteFilePath = absoluteFilePath;
+	}
 
-		log.info("Initializing RBUDP sender to {}:{}", host, port);
+	public void send() throws IOException {
+		log.info("Initializing RBUDP sender to {}:{}", address.getHostName(), address.getPort());
 		bufferSize = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getMTU() - 68;
 		log.debug("MTU of sender ethernet is {}, buffer set to {} bytes", bufferSize + 68, bufferSize);
 
 		try {
 			raf = new RandomAccessFile(absoluteFilePath, "r");
 			this.tcpSocketChannel = AsynchronousSocketChannel.open();
-			this.tcpSocketChannel.connect(new InetSocketAddress(host, port)).get();
+			this.tcpSocketChannel.connect(address).get();
 			sendSingleSyncMessage(RBUDPProtocol.getMTU);
 			synchronized (closeEverythingObjectMonitor) {
 				closeEverythingObjectMonitor.wait();
@@ -139,8 +146,21 @@ public class RBUDPSender {
 	}
 
 	private void sendFile() {
-		//TODO
-
+		log.debug("Sending file via UDP");
+		try (DatagramChannel udpChannel = DatagramChannel.open()) {
+			udpChannel.connect(address);
+			FileChannel rafChannel = raf.getChannel();
+			rafChannel.position(0L);
+			for (int i = 0; i < numberOfBlocks; i++) {
+				mtuBB.clear();
+				rafChannel.read(mtuBB);
+				mtuBB.flip();
+				udpChannel.send(mtuBB, address);
+			}
+		} catch (IOException e) {
+			log.error("Error occured in UDP channel", e);
+		}
+		log.debug("Finished sending file via UDP");
 		synchronized (closeEverythingObjectMonitor) {
 			closeEverythingObjectMonitor.notify();
 		}

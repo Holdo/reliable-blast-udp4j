@@ -91,7 +91,7 @@ public class RBUDPReceiver {
 
 	void removeSession(RBUDPSession session) {
 		sessions.remove(session.getSessionID());
-		sessionsPointerMap.remove(session.getRemoteAddress());
+		sessionsPointerMap.remove(session.getRemoteAddress().toString());
 	}
 
 }

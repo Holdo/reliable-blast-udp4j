@@ -60,16 +60,16 @@ class RBUDPReceiverThread implements Runnable {
 
 							final int senderBBSize = Math.toIntExact(threadMiniBB.getLong());
 							sessionID = UUID.randomUUID().getLeastSignificantBits();
-							RBUDPSession session = new RBUDPSession(client, sessionID,
+							RBUDPSession session = new RBUDPSession(client.getRemoteAddress(), sessionID,
 									ByteBuffer.allocateDirect((tcpServer.getServerBufferSize() < senderBBSize)? tcpServer.getServerBufferSize() : senderBBSize));
 							tcpServer.addSession(client, session);
 							ByteBuffer bb = session.getBB();
-							log.debug("Created new session with buffer size {} and ID {}", bb.capacity(), sessionID);
+							log.debug("Created new session for {} with ID {}", client.getRemoteAddress(), sessionID);
 							bb.clear();
 							bb.putInt(bb.capacity());
 							bb.putLong(sessionID);
 							bb.flip();
-							log.debug("Sending back smaller buffer size {} with secret session ID", bb.capacity());
+							log.debug("Sending back smaller buffer size {} with session ID", bb.capacity());
 							client.write(bb);
 						} else {
 							MessageHandler.handleTcpMessage(client, tcpServer.getSession(sessionID));

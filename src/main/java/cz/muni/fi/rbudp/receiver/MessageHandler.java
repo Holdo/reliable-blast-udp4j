@@ -54,6 +54,7 @@ class MessageHandler {
 		RandomAccessFile raf = new RandomAccessFile(receiveFolder + filename, "rw");
 		raf.setLength(fileSize);
 		session.setRandomAccessFile(raf, numberOfBlocks);
+		session.startUDPServer();
 		bb.clear();
 		bb.putInt(0); //TODO continue here
 		bb.flip();
