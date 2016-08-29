@@ -10,7 +10,7 @@ public class RBUDPTest {
 	public void rbudpTest() throws Exception {
 		RBUDPReceiver.getInstance().start(9250, "C:\\Java\\reliable-blast-udp4j\\target");
 		Thread.sleep(100);
-		new RBUDPSender("localhost", 9250, "C:\\Java\\reliable-blast-udp4j\\src\\test\\resources\\ideaIU-2016.2.exe").send();
-		Thread.sleep(1000); //wait for threads to finish
+		new RBUDPSender("localhost", 9250, "C:\\Java\\reliable-blast-udp4j\\src\\test\\resources\\log.log").send();
+		Thread.sleep(7000); //wait for threads to finish
 	}
 }

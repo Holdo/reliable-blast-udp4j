@@ -43,7 +43,7 @@ public class RBUDPSender {
 	}
 
 	public void send() throws IOException {
-		log.info("Initializing RBUDP sender to {}:{}", address.getHostName(), address.getPort());
+		log.info("Initializing RBUDP sender to {}", address);
 		bufferSize = NetworkInterface.getByInetAddress(InetAddress.getLocalHost()).getMTU() - 68;
 		log.debug("MTU of sender ethernet is {}, buffer set to {} bytes", bufferSize + 68, bufferSize);
 
@@ -57,8 +57,8 @@ public class RBUDPSender {
 		} catch (Exception e) {
 			log.error("Error occured in RBUDPSender", e);
 		} finally {
-			this.tcpSocketChannel.close();
-			raf.close();
+			if (tcpSocketChannel != null) tcpSocketChannel.close();
+			if (raf != null) raf.close();
 		}
 	}
 
@@ -112,9 +112,10 @@ public class RBUDPSender {
 			return null;
 		});
 
-		numberOfBlocks = (raf.length() % mtuBB.capacity() == 0L) ?
-				Math.toIntExact(raf.length() / mtuBB.capacity()) :
-				Math.toIntExact((raf.length() / mtuBB.capacity()) + 1);
+		final int dataBlockSize = mtuBB.capacity() - Integer.BYTES; //first int reserved for dataBlock ID
+		numberOfBlocks = (raf.length() % dataBlockSize == 0L) ?
+				Math.toIntExact(raf.length() / dataBlockSize) :
+				Math.toIntExact((raf.length() / dataBlockSize) + 1);
 		mtuBB.clear();
 		mtuBB.putInt(RBUDPProtocol.fileInfoInit.ordinal());
 		mtuBB.putLong(sessionID);
@@ -136,12 +137,16 @@ public class RBUDPSender {
 			udpChannel.connect(address);
 			FileChannel rafChannel = raf.getChannel();
 			rafChannel.position(0L);
+			int counter = 0;
 			for (int i = 0; i < numberOfBlocks; i++) {
 				mtuBB.clear();
+				mtuBB.putInt(i); //dataBlock ID
 				rafChannel.read(mtuBB);
 				mtuBB.flip();
 				udpChannel.send(mtuBB, address);
+				counter++;
 			}
+			log.debug("Sent {} UDP packets", counter);
 		} catch (IOException e) {
 			log.error("Error occured in UDP channel", e);
 		}

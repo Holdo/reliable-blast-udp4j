@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.EOFException;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
@@ -47,7 +48,7 @@ class RBUDPReceiverThread implements Runnable {
 						if (sessionID == null) {
 							//Init session and return smaller BB size
 							threadMiniBB.clear();
-							final long bytesRead = client.read(threadMiniBB);
+							final int bytesRead = client.read(threadMiniBB);
 							if (bytesRead == -1) {
 								log.warn("Received EOF signal via TCP, closing local socket {}", client.getRemoteAddress());
 								key.cancel();
@@ -60,11 +61,11 @@ class RBUDPReceiverThread implements Runnable {
 
 							final int senderBBSize = Math.toIntExact(threadMiniBB.getLong());
 							sessionID = UUID.randomUUID().getLeastSignificantBits();
-							RBUDPSession session = new RBUDPSession(client.getRemoteAddress(), sessionID,
+							RBUDPSession session = new RBUDPSession((InetSocketAddress) client.getRemoteAddress(), sessionID,
 									ByteBuffer.allocateDirect((tcpServer.getServerBufferSize() < senderBBSize)? tcpServer.getServerBufferSize() : senderBBSize));
 							tcpServer.addSession(client, session);
 							ByteBuffer bb = session.getBB();
-							log.debug("Created new session for {} with ID {}", client.getRemoteAddress(), sessionID);
+							log.debug("Created new {}", session);
 							bb.clear();
 							bb.putInt(bb.capacity());
 							bb.putLong(sessionID);

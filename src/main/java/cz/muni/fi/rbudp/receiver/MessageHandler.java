@@ -24,7 +24,7 @@ class MessageHandler {
 		bb.clear();
 		final int bytesRead = client.read(bb);
 		if (bytesRead == -1) {
-			log.info("Closing session of {}", session.getRemoteAddress());
+			log.info("Closing {}", session);
 			RandomAccessFile raf = session.getRandomAccessFile();
 			if (raf != null) raf.close();
 			tcpServer.removeSession(session);
@@ -54,9 +54,9 @@ class MessageHandler {
 		RandomAccessFile raf = new RandomAccessFile(receiveFolder + filename, "rw");
 		raf.setLength(fileSize);
 		session.setRandomAccessFile(raf, numberOfBlocks);
-		session.startUDPServer();
+		session.startUDPServer(client);
 		bb.clear();
-		bb.putInt(0); //TODO continue here
+		bb.putInt(0); //0 means READY
 		bb.flip();
 		client.write(bb);
 	}
