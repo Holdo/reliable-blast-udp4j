@@ -54,6 +54,9 @@ public class RBUDPSender {
 			sendSimpleSyncMessage(RBUDPProtocol.getMTU);
 			sendFileInfo();
 			sendFile();
+			//TODO send finished signal
+			//TODO checksum
+			Thread.sleep(1000); //TODO remove
 		} catch (Exception e) {
 			log.error("Error occured in RBUDPSender", e);
 		} finally {
@@ -132,8 +135,9 @@ public class RBUDPSender {
 	}
 
 	private void sendFile() {
-		log.debug("Sending file via UDP");
+		log.info("Sending file via UDP");
 		try (DatagramChannel udpChannel = DatagramChannel.open()) {
+			//TODO udpChannel.socket().setTrafficClass();
 			udpChannel.connect(address);
 			FileChannel rafChannel = raf.getChannel();
 			rafChannel.position(0L);
@@ -146,7 +150,7 @@ public class RBUDPSender {
 				udpChannel.send(mtuBB, address);
 				counter++;
 			}
-			log.debug("Sent {} UDP packets", counter);
+			log.info("Sent {} UDP packets", counter);
 		} catch (IOException e) {
 			log.error("Error occured in UDP channel", e);
 		}

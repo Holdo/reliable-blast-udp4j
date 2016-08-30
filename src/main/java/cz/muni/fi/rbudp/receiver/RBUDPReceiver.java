@@ -48,7 +48,7 @@ public class RBUDPReceiver {
 		serverBufferSize = NetworkInterface.getByInetAddress(localhost).getMTU() - 68;
 		log.debug("MTU of receiver ethernet is {}, buffer set to {} bytes", serverBufferSize + 68, serverBufferSize);
 
-		ServerSocketChannel tcpServer = ServerSocketChannel.open();
+		ServerSocketChannel tcpServer = ServerSocketChannel.open(); //async?
 		tcpServer.configureBlocking(false);
 		tcpServer.bind(new InetSocketAddress(port)); //wildcard address
 		selector = Selector.open();

@@ -19,8 +19,11 @@ class MessageHandler {
 
 	private static RBUDPReceiver tcpServer = RBUDPReceiver.getInstance();
 
+	private static ByteBuffer commandBB = ByteBuffer.allocateDirect(Integer.BYTES + Long.BYTES);
+
 	static void handleTcpMessage(SocketChannel client, RBUDPSession session) throws IOException {
 		ByteBuffer bb = session.getBB();
+		if (bb == null) bb = commandBB;
 		bb.clear();
 		final int bytesRead = client.read(bb);
 		if (bytesRead == -1) {
