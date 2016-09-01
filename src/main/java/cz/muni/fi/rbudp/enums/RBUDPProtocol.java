@@ -3,7 +3,7 @@ package cz.muni.fi.rbudp.enums;
 public enum RBUDPProtocol {
 	getMTU,
 	fileInfoInit,
-	nextState;
+	blastFinished;
 
 	private static final RBUDPProtocol[] values;
 

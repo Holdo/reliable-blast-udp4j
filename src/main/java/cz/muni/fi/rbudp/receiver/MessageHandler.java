@@ -19,7 +19,7 @@ class MessageHandler {
 
 	private static RBUDPReceiver tcpServer = RBUDPReceiver.getInstance();
 
-	private static ByteBuffer commandBB = ByteBuffer.allocateDirect(Integer.BYTES + Long.BYTES);
+	private static ByteBuffer commandBB = ByteBuffer.allocateDirect(Integer.BYTES + Long.BYTES); //message(protocol) + sessionID
 
 	static void handleTcpMessage(SocketChannel client, RBUDPSession session) throws IOException {
 		ByteBuffer bb = session.getBB();
@@ -38,13 +38,13 @@ class MessageHandler {
 		final long sessionID = bb.getLong();
 		if (sessionID != session.getSessionID()) throw new IOException("Session IDs do not match for " + client.getRemoteAddress()); //TODO security exception
 		try {
-			MessageHandler.class.getMethod(messageType.name(), SocketChannel.class, RBUDPSession.class).invoke(null, client, session);
+			MessageHandler.class.getDeclaredMethod(messageType.name(), SocketChannel.class, RBUDPSession.class).invoke(null, client, session);
 		} catch (InvocationTargetException | IllegalAccessException | NoSuchMethodException e) {
 			throw new IOException("Error trying to handle received TCP message " + messageType.name(), e);
 		}
 	}
 
-	public static void fileInfoInit(SocketChannel client, RBUDPSession session) throws IOException {
+	static void fileInfoInit(SocketChannel client, RBUDPSession session) throws IOException {
 		ByteBuffer bb = session.getBB();
 		final byte[] fileNameBuffer = new byte[bb.getInt()];
 		bb.get(fileNameBuffer);
@@ -62,5 +62,17 @@ class MessageHandler {
 		bb.putInt(0); //0 means READY
 		bb.flip();
 		client.write(bb);
+	}
+
+	static void blastFinished(SocketChannel client, RBUDPSession session) throws IOException {
+		//IntStream clearedIndicesIntStream = session.getReceivedBlocksBitSet().clearedIndicesStream();
+		//ByteBuffer outBB = ByteBuffer.allocate((missingCount + 2) * Integer.BYTES);
+		log.debug("Received blastFinished message, sending back missing blocks count");
+		session.interruptUDPServerSessionThread();
+		commandBB.clear();
+		commandBB.putInt(session.getReceivedBlocksMissingCount());
+		//clearedIndicesIntStream.forEach(outBB::putInt);
+		commandBB.flip();
+		client.write(commandBB);
 	}
 }

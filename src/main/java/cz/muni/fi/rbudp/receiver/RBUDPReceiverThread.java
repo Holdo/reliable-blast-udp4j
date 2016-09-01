@@ -90,7 +90,7 @@ class RBUDPReceiverThread implements Runnable {
 					}
 				}
 			} catch (IOException ioE) {
-				log.warn("Exception during handling TCP connection, closing {} TCP connection", ioE);
+				log.warn("Exception during handling TCP connection, closing TCP connection", ioE);
 				if (key != null) {
 					key.cancel();
 				}

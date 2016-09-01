@@ -30,6 +30,7 @@ public class RBUDPSender {
 
 	private RandomAccessFile raf = null;
 	private int numberOfBlocks;
+	private int numberOfBlocksMissing;
 
 	private int bufferSize;
 	private long sessionID;
@@ -54,9 +55,10 @@ public class RBUDPSender {
 			sendSimpleSyncMessage(RBUDPProtocol.getMTU);
 			sendFileInfo();
 			sendFile();
-			//TODO send finished signal
-			//TODO checksum
+			//Thread.sleep(1000); //TODO remove
+			sendSimpleSyncMessage(RBUDPProtocol.blastFinished);
 			Thread.sleep(1000); //TODO remove
+			//TODO checksum
 		} catch (Exception e) {
 			log.error("Error occured in RBUDPSender", e);
 		} finally {
@@ -67,21 +69,28 @@ public class RBUDPSender {
 
 	private Method sendSimpleSyncMessage(RBUDPProtocol message) throws ExecutionException, InterruptedException, IOException {
 		Future<Method> response = responseThreadExecutor.submit(() -> {
-			ByteBuffer threadBB = ByteBuffer.allocateDirect(Integer.BYTES + Long.BYTES);
 			log.debug("New thread waiting for response from TCP sync message " + message.name());
-			threadBB.clear();
-			tcpSocketChannel.read(threadBB).get();
-			threadBB.flip();
-			final int serverBB = threadBB.getInt();
-			sessionID = threadBB.getLong();
-			log.debug("TCP response from receiver: {}", serverBB);
 			switch (message) {
 				case getMTU:
+					ByteBuffer getMTUBB = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
+					tcpSocketChannel.read(getMTUBB).get();
+					getMTUBB.flip();
+					final int serverBB = getMTUBB.getInt();
+					sessionID = getMTUBB.getLong();
+					log.debug("Received TCP response: {} and session created", serverBB);
 					if (serverBB < bufferSize) bufferSize = serverBB;
 					mtuBB = ByteBuffer.allocateDirect(bufferSize);
 					log.info("MTU agreed on {}", bufferSize + 68);
 					return RBUDPSender.class.getDeclaredMethod("sendFileInfo");
+				case blastFinished:
+					ByteBuffer blastFinishedBB = ByteBuffer.allocate(Integer.BYTES);
+					tcpSocketChannel.read(blastFinishedBB).get();
+					blastFinishedBB.flip();
+					numberOfBlocksMissing = blastFinishedBB.getInt();
+					log.debug("Receiver is missing {} data blocks", numberOfBlocksMissing);
+					return RBUDPSender.class.getDeclaredMethod("sendFileInfo");
 				default:
+					log.error("Received unknown {} message", message.name());
 					return RBUDPSender.class.getMethod("unknownMethod"); //should not happen
 			}
 		});
@@ -92,12 +101,15 @@ public class RBUDPSender {
 			case getMTU:
 				mtuBB.putLong(bufferSize); //long because sessionID will be long!!!
 				break;
+			case blastFinished:
+				mtuBB.putLong(sessionID);
+				break;
 			default:
 				throw new IOException("Cannot send unknown message: " + message.name());
 		}
 		mtuBB.flip();
 		log.debug("Sending {} sync message via TCP", message.name());
-		this.tcpSocketChannel.write(mtuBB).get();
+		tcpSocketChannel.write(mtuBB).get();
 
 		return response.get();
 	}
@@ -143,6 +155,7 @@ public class RBUDPSender {
 			rafChannel.position(0L);
 			int counter = 0;
 			for (int i = 0; i < numberOfBlocks; i++) {
+				Thread.sleep(0L, 1); //give network time to breathe
 				mtuBB.clear();
 				mtuBB.putInt(i); //dataBlock ID
 				rafChannel.read(mtuBB);
@@ -151,7 +164,7 @@ public class RBUDPSender {
 				counter++;
 			}
 			log.info("Sent {} UDP packets", counter);
-		} catch (IOException e) {
+		} catch (Exception e) {
 			log.error("Error occured in UDP channel", e);
 		}
 		log.debug("Finished sending file via UDP");
